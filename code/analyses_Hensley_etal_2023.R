@@ -131,6 +131,32 @@ d_survey <- rbind(d1,d2)
 
 ## EGD display trait data
 disp_dat <- read.csv("~/Desktop/ESM_Hensley_etal_2023/data/egd_display_data_raw.csv",header=TRUE)
+bright_dat <- read.csv("~/Desktop/ESM_Hensley_etal_2023/data/brightness_analysis.csv",header=TRUE)
+
+bright_dat <- bright_dat %>% arrange(display_num,pulse_num,frame) %>%
+  mutate(brightness = (max_pix_value/roi_area) - (background_max/background_area)) %>%
+  group_by(display_num) %>%
+  mutate(p1_bright = max(brightness[pulse_num == 1]),
+         p1_min = min(brightness[pulse_num == 1]),
+         relative_brightness = brightness / p1_bright,
+         display_num = display_num + max(disp_dat$display_num)) %>% ungroup() %>%
+  group_by(display_num,pulse_num) %>%
+  dplyr::summarise(display_num = mean(display_num),
+                   pulse_num = mean(pulse_num),
+                   relative_brightness = max(relative_brightness)) %>% ungroup()
+
+sub_bright <- subset.data.frame(bright_dat,select = c("display_num","pulse_num","relative_brightness"))
+sub_bright$time <- as.numeric(NA)
+sub_bright$ipi_num <- as.integer(NA)
+sub_bright$ipi_time_s <- as.numeric(NA)
+sub_bright$ipd_distance_mm <- as.numeric(NA)
+sub_bright$vert_dist_num <- as.numeric(NA)
+sub_bright$source <- "NMH"
+
+sub_bright <- sub_bright %>% dplyr::select(display_num,pulse_num,time,ipi_num,ipi_time_s,ipd_distance_mm,vert_dist_num,relative_brightness,source)
+names(sub_bright) <- colnames(disp_dat)
+
+disp_dat <- rbind(disp_dat,sub_bright)
 
 ## video time series data
 timeser <- read.csv("~/Desktop/ESM_Hensley_etal_2023/data/09_27_18_right_2_beautified.csv",header=FALSE,col.names = c("frame","brightness","adj_brightness"))
@@ -150,9 +176,9 @@ dab <- data.frame(frame = c(fr_med,fr_low,fr_hi),
                             timeser$adj_brightness[timeser$frame == fr_low],
                             timeser$adj_brightness[timeser$frame == fr_hi]))
 
-p_med <- readPNG("~/Desktop/ESM_Hensley_etal_2023/data/23783_ed.png",native = TRUE)
-p_low <- readPNG("~/Desktop/ESM_Hensley_etal_2023/data/40297_ed.png",native = TRUE)
-p_hi <- readPNG("~/Desktop/ESM_Hensley_etal_2023/data/8819_ed.png",native = TRUE)
+p_med <- readPNG("~/Desktop/ESM_Hensley_etal_2023/data/23783_ed2.png",native = TRUE)
+p_low <- readPNG("~/Desktop/ESM_Hensley_etal_2023/data/40297_ed2.png",native = TRUE)
+p_hi <- readPNG("~/Desktop/ESM_Hensley_etal_2023/data/8819_ed2.png",native = TRUE)
 
 ## Photeros sp. display data
 p_disp <- readPNG("~/Desktop/ESM_Hensley_etal_2023/data/output_238.png",native = TRUE)
@@ -187,7 +213,11 @@ old_dat3 <- old_dat %>% mutate(signal_start_delay = (frame - stim_start)/30, sig
   mutate(new_time = time - min(time)) %>% ungroup()
 
 ##### Analysis and Figures #####
-#New Figure 1
+##New Figure 1
+fig1new <- (fig1a + fig2) + fig3a + fig3b + plot_layout(nrow=1,widths = c(0.25,1,0.65,0.65))#+ plot_annotation(tag_levels = c("A")) & theme(plot.tag = element_text(face = 'bold',size = 50))
+ggsave(filename = "fig1new.jpeg",plot = fig1new,device = "jpeg",path = "~/Desktop/ESM_Hensley_etal_2023/figures/",dpi = 300,units = "px",height = 2900,width = 13500)
+
+#Figure S1
 fig1a <- wrap_elements(p_disp)
 fig1b <- phodat2 %>% mutate(y = case_when(Direction == "Downwards" ~ y*-1,
                                  Direction == "Upwards" ~ y)) %>%
@@ -216,7 +246,7 @@ fig1b <- phodat2 %>% mutate(y = case_when(Direction == "Downwards" ~ y*-1,
 fig1 <- fig1a + fig1b + plot_layout(nrow=1,widths = c(1.5,2))
 ggsave(filename = "fig1.jpeg",plot = fig1,device = "jpeg",path = "~/Desktop/ESM_Hensley_etal_2023/figures/",dpi = 300,units = "px",height = 2500,width = 6000)
 
-#Figure 2
+#Figure 1
 ppp <- wrap_elements(panel = p_hi) + wrap_elements(panel = p_med) + wrap_elements(panel = p_low) +
   plot_layout(ncol = 3,widths = 1)
 
@@ -227,7 +257,7 @@ pd <- timeser %>% ggplot(aes(x=frame/(30),y=adj_brightness)) + geom_line(linewid
         panel.grid.minor = element_blank(),
         legend.position = "none",
         axis.text = element_text(size=20),
-        axis.title = element_text(size=24,face="bold"))
+        axis.title = element_text(size=15,face="bold"))
 
 fig2 <- ggarrange(ppp,pd,nrow=2)
 ggsave(filename = "fig2.jpeg",plot = fig2,device = "jpeg",path = "~/Desktop/ESM_Hensley_etal_2023/figures/",dpi = 300,units = "px",height = 3300,width = 5000)
@@ -256,7 +286,7 @@ disp_dat %>% dplyr::mutate(duration = time*1000, ipi = ipi_time_s * 1000) %>%
                    se = sd(measurement,na.rm=TRUE)/sqrt(n()),
                    n = n()) %>% print(n = 29)
 
-# Figure 3
+# Figure 1
 gsum <- d_survey %>% group_by(year,Date) %>% dplyr::summarise(ndisp = n(),dafter = sum(Days_after_fullmoon)/n()) %>%
   dplyr::mutate(n = as.numeric(ndisp), Days_after_fullmoon = as.numeric(dafter), year = as.factor(year))
 
@@ -290,7 +320,7 @@ fig3b <- ggMarginal(p = fig3b, data = gsum,x = Days_after_full_moon,y=n+1,type =
 fig3 <- ggarrange(fig3a,fig3b,ncol = 2,labels = "AUTO",font.label = list(size=60,face="bold"))
 ggsave(filename = "fig3.jpeg",plot = fig3,device = "jpeg",path = "~/Desktop/ESM_Hensley_etal_2023/figures/",dpi = 300,units = "px",height = 2500,width = 6000)
 
-# Figure 4
+# Figure 2
 fig4a <- xydat %>% filter(stim_duration == 0) %>% mutate(date_tank = interaction(date,tank),
                                                          Trial = case_when(date_tank == "5/19/17.A" ~ "Trial 4",
                                                                            date_tank == "5/19/17.C" ~ "Trial 3",
@@ -298,12 +328,12 @@ fig4a <- xydat %>% filter(stim_duration == 0) %>% mutate(date_tank = interaction
                                                                            date_tank == "5/18/17.C" ~ "Trial 2")) %>%
   arrange(date,tank,time) %>%
   ggplot(aes(x=time)) +
-  geom_histogram(fill=NA) + facet_wrap(.~Trial,ncol = 4)
+  geom_histogram(fill=NA,binwidth = 30) + facet_wrap(.~Trial,ncol = 4)
 
 binwidth = layer_data(fig4a) %>% mutate(w=xmax-xmin) %>% pull(w) %>% median
 
 fig4a <- fig4a + stat_bin(geom="step",linewidth=1.75,closed = "right",pad=TRUE,
-                          aes(color=Trial),binwidth=binwidth)+#, position=position_nudge(x=-0.25*binwidth)) +
+                          aes(color=Trial),binwidth=30) + ##can change the BINWIDTH here is wanted #, position=position_nudge(x=-0.25*binwidth)) +
   xlab("Time (s)") + ylab("# of displays") +
   theme_minimal(base_size = 20) +
   theme(panel.grid.major = element_blank(),
@@ -322,7 +352,30 @@ fig4a <- fig4a + stat_bin(geom="step",linewidth=1.75,closed = "right",pad=TRUE,
     "Trial 4" = "#CC79A7"
   ))
 
-#Fig 4B Middle Row
+#Fig 4B Left Column
+
+'''
+> ex_situ_t
+# A tibble: 4 × 2
+# Rowwise:  date_tank
+  date_tank               data
+  <fct>     <list<tibble[,1]>>
+1 5/19/17.A          [101 × 1]
+2 5/18/17.B           [44 × 1]
+3 5/18/17.C           [60 × 1]
+4 5/19/17.C          [137 × 1]
+
+"5/19/17.A" ~ "Trial 4",
+"5/19/17.C" ~ "Trial 3",
+"5/18/17.B" ~ "Trial 1",
+"5/18/17.C" ~ "Trial 2"))
+
+index 1 is Trial 4
+index 2 is Trial 1
+index 3 is Trial 2
+index 4 is Trial 3
+'''
+
 synchrony_poisson_exp <- function(data_set1,min_obs,index){
   input <- as.character(data_set1$date_tank[[index]])
   data_date <- str_split_i(input,pattern = "\\.",i = 1)
@@ -335,10 +388,22 @@ synchrony_poisson_exp <- function(data_set1,min_obs,index){
   rate_expected <- n_d / tot_obs_time
   h_pois_expected <- rpois(tot_obs_time,rate_expected)
   h_data_expected <- data.frame(count = h_pois_expected,time = round(seq(from = 0,to = tot_obs_time, length.out = length(h_pois_expected))))
-  h_summary_exp <- h_data_expected %>% group_by(count) %>% dplyr::summarize(n = n()) %>% mutate(percent = (n/sum(n)*100))
+
+  h_data_expected$ind <- rep(1:100,each=30)[1:nrow(h_data_expected)] #each = window size
+
+  #h_summary_exp <- h_data_expected %>% group_by(count) %>% dplyr::summarize(n = n()) %>% mutate(percent = (n/sum(n)*100))
+  h_summary_exp <- h_data_expected %>% group_by(ind) %>% dplyr::summarize(n = sum(count)) %>% mutate(percent = (n/sum(n))) %>%
+    mutate(group_bin = case_when(
+      n < 1 ~ "0",
+      n >= 1 & n <= 5 ~ "1 - 5",
+      n > 5 & n <= 10 ~ "6 - 10",
+      n > 10 ~ "11+"),
+      group_bin = as.factor(group_bin)) %>% group_by(group_bin) %>%
+    dplyr::summarise(sum_count = sum(n)) %>% mutate(percent = (sum_count/sum(sum_count)))
 
   return(h_summary_exp)
 }
+
 synchrony_poisson_obs <- function(data_set1,min_obs,index){
   input <- as.character(data_set1$date_tank[[index]])
   data_date <- str_split_i(input,pattern = "\\.",i = 1)
@@ -354,131 +419,165 @@ synchrony_poisson_obs <- function(data_set1,min_obs,index){
   dd_sim <- data.frame(time = round(dd$time,digits = 0),count = 1)
   reg <- merge(nt,dd_sim,all.x = TRUE)
   reg[is.na(reg)] <- 0
-  h_data_obs <- reg %>% group_by(time) %>% dplyr::summarize(count = sum(count))
-  h_summary_obs <- h_data_obs %>% group_by(count) %>% dplyr::summarise( n = n()) %>% mutate(percent = (n/sum(n)*100))
+  h_data_obs <- reg %>% group_by(time) %>% dplyr::summarize(count = sum(count)) %>% ungroup()
+
+  h_data_obs$ind <- rep(1:100,each=30)[1:nrow(h_data_obs)]
+
+  #h_summary_obs <- h_data_obs %>% group_by(count) %>% dplyr::summarise( n = n()) %>% mutate(percent = (n/sum(n)*100))
+  h_summary_obs <- h_data_obs %>% group_by(ind) %>% dplyr::summarize(n = sum(count)) %>% mutate(percent = (n/sum(n))) %>%
+    mutate(group_bin = case_when(
+      n < 1 ~ "0",
+      n >= 1 & n <= 5 ~ "1 - 5",
+      n > 5 & n <= 10 ~ "6 - 10",
+      n > 10 ~ "11+"),
+      group_bin = as.factor(group_bin)) %>% group_by(group_bin) %>%
+    dplyr::summarise(sum_count = sum(n)) %>% mutate(percent = (sum_count/sum(sum_count)))
 
   return(h_summary_obs)
 }
 
-h_size <- seq(0,11)
-h_lab <- as.character(seq(0,11))
+#h_size <- seq(0,11)
+#h_lab <- as.character(seq(0,11))
 
+### INDEX 1 ### TRIAL 4
 ne1.1 <- synchrony_poisson_exp(ex_situ_t,15,1)
 ne1.2 <- synchrony_poisson_obs(ex_situ_t,15,1)
-extra_ne1.2 <- data.frame(count = seq(max(ne1.2$count)+1,11))
-extra_r1 <- data.frame(n = rep(0,nrow(extra_ne1.2)), percent = rep(0,nrow(extra_ne1.2)))
-extra_rows1 <- cbind(extra_ne1.2,extra_r1)
-ne1.2 <- rbind(ne1.2,extra_rows1)
 
-ne1 <- ne1.2 %>% ggplot(aes(x=count)) +
-  geom_bar(aes(y=percent),stat = "identity",fill="#56B4E9") +
-  geom_line(data=ne1.1,aes(y=percent),color="#000000",linewidth=1.5) +
-  geom_point(data=ne1.1,aes(y=percent),color="#000000",size=3) +
-  ylab("% of time with observed # signals") + xlab("# observed signals") +
-  theme_minimal(base_size = 20) +
-  theme(panel.grid.minor = element_blank(),
-        panel.grid.major.x = element_blank(),
-        #axis.title = element_text(size=50,face = "bold"),
-        axis.title = element_blank(),
-        axis.text = element_text(size=30),
-        title = element_text(hjust = 0.5,size=50,face = "bold")) +
-  scale_x_continuous(breaks = h_size,labels = h_lab) + ylim(c(0,100)) +
-  ggtitle(label = "Trial 1") +
-  scale_y_break(ticklabels = c(5,10,15,90,95,100),breaks = c(15,85),scales = "free",expand = FALSE) +
-  theme(
-    plot.title = element_text(hjust = 0.5,face="bold"),
-    axis.text.y.right = element_blank(),
-    axis.line.y.right = element_blank(),
-    axis.ticks.y.right = element_blank()
-  )
+extra_r1 <- data.frame(group_bin = factor("11+"),sum_count = 0,percent = 0)
+extra_ne1.1 <- rbind(ne1.1,extra_r1)
 
-ne2.1 <- synchrony_poisson_exp(ex_situ_t,15,2)
-ne2.2 <- synchrony_poisson_obs(ex_situ_t,15,2)
-extra_ne2.2 <- data.frame(count = seq(max(ne2.2$count)+1,11))
-extra_r2 <- data.frame(n = rep(0,nrow(extra_ne2.2)), percent = rep(0,nrow(extra_ne2.2)))
-extra_rows2 <- cbind(extra_ne2.2,extra_r2)
-ne2.2 <- rbind(ne2.2,extra_rows2)
+#extra_ne1.2 <- data.frame(count = seq(max(ne1.2$count)+1,11))
+#extra_r1 <- data.frame(n = rep(0,nrow(extra_ne1.2)), percent = rep(0,nrow(extra_ne1.2)))
+#ne1.2 <- rbind(ne1.2,extra_rows1)
 
-ne2 <- ne2.2 %>% ggplot(aes(x=count)) +
-  geom_bar(aes(y=percent),stat = "identity",fill="#E69F00") +
-  geom_line(data=ne2.1,aes(y=percent),color="#000000",linewidth=1.5) +
-  geom_point(data=ne2.1,aes(y=percent),color="#000000",size=3) +
-  #ylab("% of time with observed # signals") +
-  xlab("# observed signals") +
-  theme_minimal(base_size = 20) +
-  theme(panel.grid.minor = element_blank(),
-        panel.grid.major.x = element_blank(),
-        #axis.title = element_text(size=50,face = "bold"),
-        axis.title = element_blank(),
-        axis.text = element_text(size=30),
-        title = element_text(hjust = 0.5,size=50,face = "bold")) +
-  scale_x_continuous(breaks = h_size,labels = h_lab) + ylim(c(0,100)) +
-  ggtitle(label = "Trial 2") +
-  scale_y_break(ticklabels = c(5,10,15,90,95,100),breaks = c(15,85),scales = "free",expand = FALSE) +
-  theme(
-    plot.title = element_text(hjust = 0.5,face="bold"),
-    axis.text.y.right = element_blank(),
-    axis.line.y.right = element_blank(),
-    axis.ticks.y.right = element_blank()
-  )
-
-ne3.1 <- synchrony_poisson_exp(ex_situ_t,15,3)
-ne3.2 <- synchrony_poisson_obs(ex_situ_t,15,3)
-extra_ne3.2 <- data.frame(count = seq(max(ne3.2$count)+1,11))
-extra_r3 <- data.frame(n = rep(0,nrow(extra_ne3.2)), percent = rep(0,nrow(extra_ne3.2)))
-extra_rows3 <- cbind(extra_ne3.2,extra_r3)
-ne3.2 <- rbind(ne3.2,extra_rows3)
-
-ne3 <- ne3.2 %>% ggplot(aes(x=count)) +
-  geom_bar(aes(y=percent),stat = "identity",fill="#009E73") +
-  geom_line(data=ne3.1,aes(y=percent),color="#000000",linewidth=1.5) +
-  geom_point(data=ne3.1,aes(y=percent),color="#000000",size=3) +
-  ylab("% of time with observed # signals") + xlab("# observed signals") +
-  theme_minimal(base_size = 20) +
-  theme(panel.grid.minor = element_blank(),
-        panel.grid.major.x = element_blank(),
-        #axis.title = element_text(size=50,face = "bold"),
-        axis.title = element_blank(),
-        axis.text = element_text(size=30),
-        title = element_text(hjust = 0.5,size=50,face = "bold")) +
-  scale_x_continuous(breaks = h_size,labels = h_lab) + ylim(c(0,100)) +
-  ggtitle(label = "Trial 3") +
-  scale_y_break(ticklabels = c(5,10,15,90,95,100),breaks = c(15,85),scales = "free",expand = FALSE) +
-  theme(
-    plot.title = element_text(hjust = 0.5,face="bold"),
-    axis.text.y.right = element_blank(),
-    axis.line.y.right = element_blank(),
-    axis.ticks.y.right = element_blank()
-  )
-
-ne4.1 <- synchrony_poisson_exp(ex_situ_t,15,4)
-ne4.2 <- synchrony_poisson_obs(ex_situ_t,15,4)
-extra_ne4.2 <- data.frame(count = seq(max(ne4.2$count)+1,11))
-extra_r4 <- data.frame(n = rep(0,nrow(extra_ne4.2)), percent = rep(0,nrow(extra_ne4.2)))
-extra_rows4 <- cbind(extra_ne4.2,extra_r4)
-ne4.2 <- rbind(ne4.2,extra_rows4)
-
-ne4 <- ne4.2 %>% ggplot(aes(x=count)) +
+ne1 <- ne1.2 %>% mutate(group_bin = fct_relevel(group_bin,"0","1 - 5","6 - 10","11+")) %>%
+  ggplot(aes(x=group_bin)) +
   geom_bar(aes(y=percent),stat = "identity",fill="#CC79A7") +
-  geom_line(data=ne4.1,aes(y=percent),color="#000000",linewidth=1.5) +
-  geom_point(data=ne4.1,aes(y=percent),color="#000000",size=3) +
-  ylab("% of time with observed # signals") + xlab("# observed signals") +
+  geom_line(data=extra_ne1.1,aes(y=percent,group=1),color="#000000",linewidth=1.5) +
+  geom_point(data=extra_ne1.1,aes(y=percent),color="#000000",size=3) +
+  ylab("P( Observe # of signals in 30 s )") +
+  xlab("# observed signals in 30 s") +
   theme_minimal(base_size = 20) +
+  ylim(c(0,1)) +
+  ggtitle(label = "Trial 4") +
   theme(panel.grid.minor = element_blank(),
         panel.grid.major.x = element_blank(),
         axis.title.x = element_text(size=50,face = "bold"),
         axis.title.y = element_blank(),
         axis.text = element_text(size=30),
-        title = element_text(hjust = 0.5, size=50,face = "bold")) +
-  scale_x_continuous(breaks = h_size,labels = h_lab) + ylim(c(0,100)) +
-  ggtitle(label = "Trial 4") + theme() +
-  scale_y_break(ticklabels = c(5,10,15,90,95,100),breaks = c(15,85),scales = "free",expand = FALSE) +
-  theme(
-    plot.title = element_text(hjust = 0.5,face="bold"),
-    axis.text.y.right = element_blank(),
-    axis.line.y.right = element_blank(),
-    axis.ticks.y.right = element_blank()
-  )
+        plot.title = element_text(hjust = 0.5,size=50,face = "bold"))
+
+# ne1 <- ne1.2 %>% ggplot(aes(x=count)) +
+#   geom_bar(aes(y=percent),stat = "identity",fill="#56B4E9") +
+#   geom_line(data=ne1.1,aes(y=percent),color="#000000",linewidth=1.5) +
+#   geom_point(data=ne1.1,aes(y=percent),color="#000000",size=3) +
+#   ylab("% of time with observed # signals") + xlab("# observed signals") +
+#   theme_minimal(base_size = 20) +
+#   theme(panel.grid.minor = element_blank(),
+#         panel.grid.major.x = element_blank(),
+#         #axis.title = element_text(size=50,face = "bold"),
+#         axis.title = element_blank(),
+#         axis.text = element_text(size=30),
+#         title = element_text(hjust = 0.5,size=50,face = "bold")) +
+#   scale_x_continuous(breaks = h_size,labels = h_lab) + ylim(c(0,100)) +
+#   ggtitle(label = "Trial 1") +
+#   scale_y_break(ticklabels = c(5,10,15,90,95,100),breaks = c(15,85),scales = "free",expand = FALSE) +
+#   theme(
+#     plot.title = element_text(hjust = 0.5,face="bold"),
+#     axis.text.y.right = element_blank(),
+#     axis.line.y.right = element_blank(),
+#     axis.ticks.y.right = element_blank()
+#   )
+
+
+### INDEX 2 ### TRIAL 1
+ne2.1 <- synchrony_poisson_exp(ex_situ_t,15,2)
+ne2.2 <- synchrony_poisson_obs(ex_situ_t,15,2)
+
+extra_r2 <- data.frame(group_bin = c(factor("6 - 10"),factor("11+")),sum_count = c(0,0),percent = c(0,0))
+extra_ne2.1 <- rbind(ne2.1,extra_r2)
+
+extra_r2.2 <- data.frame(group_bin = factor("11+"),sum_count = 0,percent = 0)
+extra_ne2.2 <- rbind(ne2.2,extra_r2.2)
+
+# extra_ne2.2 <- data.frame(count = seq(max(ne2.2$count)+1,11))
+# extra_r2 <- data.frame(n = rep(0,nrow(extra_ne2.2)), percent = rep(0,nrow(extra_ne2.2)))
+# extra_rows2 <- cbind(extra_ne2.2,extra_r2)
+# ne2.2 <- rbind(ne2.2,extra_rows2)
+
+ne2 <- extra_ne2.2 %>% mutate(group_bin = fct_relevel(group_bin,"0","1 - 5","6 - 10","11+")) %>%
+  ggplot(aes(x=group_bin)) +
+  geom_bar(aes(y=percent),stat = "identity",fill="#56B4E9") +
+  geom_line(data=extra_ne2.1,aes(y=percent,group=1),color="#000000",linewidth=1.5) +
+  geom_point(data=extra_ne2.1,aes(y=percent),color="#000000",size=3) +
+  ylab("P( Observe # of signals in 30 s )") + xlab("# observed signals in 30 s") +
+  theme_minimal(base_size = 20) +
+  ylim(c(0,1)) +
+  ggtitle(label = "Trial 1") +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major.x = element_blank(),
+        #axis.title = element_text(size=50,face = "bold"),
+        axis.title = element_blank(),
+        axis.text = element_text(size=30),
+        plot.title = element_text(hjust = 0.5,size=50,face = "bold"))
+
+
+### INDEX 3 ### TRIAL 2
+ne3.1 <- synchrony_poisson_exp(ex_situ_t,15,3)
+ne3.2 <- synchrony_poisson_obs(ex_situ_t,15,3)
+
+extra_r3 <- data.frame(group_bin = c(factor("11+"),factor("6 - 10")),sum_count = c(0,0),percent = c(0,0))
+extra_ne3.1 <- rbind(ne3.1,extra_r3)
+
+# extra_ne3.2 <- data.frame(count = seq(max(ne3.2$count)+1,11))
+# extra_r3 <- data.frame(n = rep(0,nrow(extra_ne3.2)), percent = rep(0,nrow(extra_ne3.2)))
+# extra_rows3 <- cbind(extra_ne3.2,extra_r3)
+# ne3.2 <- rbind(ne3.2,extra_rows3)
+
+ne3 <- ne3.2 %>% mutate(group_bin = fct_relevel(group_bin,"0","1 - 5","6 - 10","11+")) %>%
+  ggplot(aes(x=group_bin)) +
+  geom_bar(aes(y=percent),stat = "identity",fill="#E69F00") +
+  geom_line(data=extra_ne3.1,aes(y=percent,group=1),color="#000000",linewidth=1.5) +
+  geom_point(data=extra_ne3.1,aes(y=percent),color="#000000",size=3) +
+  #ylab("P( Observe # of signals in 30 s )") +
+  #xlab("# observed signals in 30 s") +
+  theme_minimal(base_size = 20) +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major.x = element_blank(),
+        #axis.title = element_text(size=50,face = "bold"),
+        axis.title = element_blank(),
+        axis.text = element_text(size=30),
+        plot.title = element_text(hjust = 0.5,size=50,face = "bold")) +
+  ylim(c(0,1)) +
+  ggtitle(label = "Trial 2")
+
+#### INDEX 4 ### TRIAL 3
+ne4.1 <- synchrony_poisson_exp(ex_situ_t,15,4)
+ne4.2 <- synchrony_poisson_obs(ex_situ_t,15,4)
+
+extra_r4 <- data.frame(group_bin = c(factor("11+"),factor("0")),sum_count = c(0,0),percent = c(0,0))
+extra_ne4.1 <- rbind(ne4.1,extra_r4)
+# extra_ne4.2 <- data.frame(count = seq(max(ne4.2$count)+1,11))
+# extra_r4 <- data.frame(n = rep(0,nrow(extra_ne4.2)), percent = rep(0,nrow(extra_ne4.2)))
+# extra_rows4 <- cbind(extra_ne4.2,extra_r4)
+# ne4.2 <- rbind(ne4.2,extra_rows4)
+
+ne4 <- ne4.2 %>% mutate(group_bin = fct_relevel(group_bin,"0","1 - 5","6 - 10","11+")) %>%
+  ggplot(aes(x=group_bin)) +
+  geom_bar(aes(y=percent),stat = "identity",fill="#009E73") +
+  geom_line(data=extra_ne4.1,aes(y=percent,group=1),color="#000000",linewidth=1.5) +
+  geom_point(data=extra_ne4.1,aes(y=percent),color="#000000",size=3) +
+  #ylab("P( Observe # of signals in 30 s )") +
+  #xlab("# signals observed in 30 s") +
+  theme_minimal(base_size = 20) +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major.x = element_blank(),
+        #axis.title = element_text(size=50,face = "bold"),
+        axis.title = element_blank(),
+        axis.text = element_text(size=30),
+        plot.title = element_text(hjust = 0.5,size=50,face = "bold")) +
+  ylim(c(0,1)) +
+  ggtitle(label = "Trial 3")
 
 ## test for statistical deviation from Poisson distribution ##
 # from Safarti et al. 2021
@@ -538,35 +637,76 @@ z_score1 <- p_erc(z(nt1))
 t_score1 <- p_erc(t(nt1))
 n1grb1 <- paste0("z = ",round(z_score1[1],digits = 2),", p[z] = ",scales::scientific(z_score1[2], digits = 3))
 n1grb2 <- paste0("t = ",round(t_score1[1],digits = 2),", p[t] = ",scales::scientific(t_score1[2], digits = 3))
-ne1 <- ne1 + annotate("text",x=7, y=95,label = n1grb1,size=20) + annotate("text",x=7, y=90,label = n1grb2,size=20)
+ne1_fin <- ne1 + annotate("text",x=3.5, y=.95,label = n1grb1,size=20) + annotate("text",x=3.5, y=.75,label = n1grb2,size=20)
 
 z_score2 <- p_erc(z(nt2))
 t_score2 <- p_erc(t(nt2))
 n2grb1 <- paste0("z = ",round(z_score2[1],digits = 2),", p[z] = ",scales::scientific(z_score2[2], digits = 3))
 n2grb2 <- paste0("t = ",round(t_score2[1],digits = 2),", p[t] = ",scales::scientific(t_score2[2], digits = 3))
-ne2 <- ne2 + annotate("text",x=7, y=95,label = n2grb1,size=20) + annotate("text",x=7, y=90,label = n2grb2,size=20)
+ne2_fin <- ne2 + annotate("text",x=3.5, y=.95,label = n2grb1,size=20) + annotate("text",x=3.5, y=.75,label = n2grb2,size=20)
 
 z_score3 <- p_erc(z(nt3))
 t_score3 <- p_erc(t(nt3))
 n3grb1 <- paste0("z = ",round(z_score3[1],digits = 2),", p[z] = ",scales::scientific(z_score3[2], digits = 3))
 n3grb2 <- paste0("t = ",round(t_score3[1],digits = 2),", p[t] = ",scales::scientific(t_score3[2], digits = 3))
-ne3 <- ne3 + annotate("text",x=7, y=95,label = n3grb1,size=20) + annotate("text",x=7, y=90,label = n3grb2,size=20)
+ne3_fin <- ne3 + annotate("text",x=3.5, y=.95,label = n3grb1,size=20) + annotate("text",x=3.5, y=.75,label = n3grb2,size=20)
 
 z_score4 <- p_erc(z(nt4))
 t_score4 <- p_erc(t(nt4))
 n4grb1 <- paste0("z = ",round(z_score4[1],digits = 2),", p[z] = ",scales::scientific(z_score4[2], digits = 3))
 n4grb2 <- paste0("t = ",round(t_score4[1],digits = 2),", p[t] = ",scales::scientific(t_score4[2], digits = 3))
-ne4 <- ne4 + annotate("text",x=7, y=95,label = n4grb1,size=20) + annotate("text",x=7, y=90,label = n4grb2,size=20)
+ne4_fin <- ne4 + annotate("text",x=3.5, y=.95,label = n4grb1,size=20) + annotate("text",x=3.5, y=.75,label = n4grb2,size=20)
 
-fig4b <- ggarrange(print(ne1),print(ne2),print(ne3),print(ne4),nrow = 4,align = "h")
-fig4b <- annotate_figure(fig4b,left = text_grob("% of time with observed # signals", color = "#000000", rot = 90,size=50,face="bold"))
+fig4b <- ggarrange(print(ne2_fin),print(ne3_fin),print(ne4_fin),print(ne1_fin),nrow = 4,align = "h")
+fig4b <- annotate_figure(fig4b,left = text_grob("P( Observe # of signals in 30 s )", color = "#000000", rot = 90,size=50,face="bold"))
+
+### attempting to compare the distribution of nearest neighbor distances from the data compared to a distribution of nndist from uniformly
+### signalling individuals
+
+nn_nt_all2 <- nn_nt_all %>% nest_by(date_tank)
+
+ks_test_sim_dat <- function(nested_dataset,index){
+  dataset <- nested_dataset$data[[index]]
+
+  dat_length <- length(dataset$time)
+  samp_rate_median <- median(dataset$time)
+
+  sim_dat <- rnormTrunc(dat_length,samp_rate_median,samp_rate_sd,min = 0)
+  real_dat <- dataset$time
+
+  p_value_ks <- ks.test(real_dat,sim_dat,exact = TRUE)
+  return(p_value_ks)
+}
+
+ks_p1 <- ks_test_sim_dat(nn_nt_all2,1) #Trial 4
+ks_p2 <- ks_test_sim_dat(nn_nt_all2,2) #Trial 1
+ks_p3 <- ks_test_sim_dat(nn_nt_all2,3) #Trial 2
+ks_p4 <- ks_test_sim_dat(nn_nt_all2,4) #Trial 3
+
+ks_test_sim_dist <- function(nested_dataset,index){
+  dataset <- nested_dataset$data[[index]]
+
+  dat_length <- length(dataset$dist)
+  samp_rate_median <- median(dataset$dist)
+
+  sim_dat <- rnormTrunc(dat_length,samp_rate_median,samp_rate_sd,min = 0)
+  real_dat <- dataset$dist
+
+  p_value_ks <- ks.test(real_dat,sim_dat,exact = TRUE)
+  return(p_value_ks)
+}
+
+ks_pdist1 <- ks_test_sim_dist(nn_nt_all2,1) #Trial 4
+ks_pdist2 <- ks_test_sim_dist(nn_nt_all2,2) #Trial 1
+ks_pdist3 <- ks_test_sim_dist(nn_nt_all2,3) #Trial 2
+ks_pdist4 <- ks_test_sim_dist(nn_nt_all2,4) #Trial 3
 
 fig4c <- nn_nt_all %>% mutate(Trial = case_when(date_tank == "5/19/17.A" ~ "Trial 4",
                                                 date_tank == "5/19/17.C" ~ "Trial 3",
                                                 date_tank == "5/18/17.B" ~ "Trial 1",
                                                 date_tank == "5/18/17.C" ~ "Trial 2")) %>%
   ggplot(aes(y=dist,x=time)) +
-  geom_point(aes(fill=density,color=Trial),size=3.5,shape=21,stroke=1.25) +
+  geom_point(aes(fill=density,color=Trial),size=5.5,shape=21,stroke=1.25) +
   scale_fill_gradient(name="Density",high="black",low="white",guide="colorbar") +
   theme_minimal(base_size = 20) +
   theme(legend.position = "left") +
@@ -586,11 +726,27 @@ fig4c <- nn_nt_all %>% mutate(Trial = case_when(date_tank == "5/19/17.A" ~ "Tria
     "Trial 4" = "#CC79A7"
   ))
 
-fig4.1 <- ggarrange(fig4b,fig4c,ncol=2,widths = c(1.1,1))
-fig4 <- ggarrange(fig4a,fig4.1,nrow=2,heights = c(1,2))
-ggsave(filename = "fig4.jpeg",plot = fig4,device = "jpeg",path = "~/Desktop/ESM_Hensley_etal_2023/figures/",dpi = 300,units = "px",height = 12000,width = 12000,limitsize = FALSE)
+fig4c_ks_text_time <- data.frame(p_values = c(paste0("p[D_time] = ",scales::scientific(ks_p1$p.value,digits = 3)),
+                                         paste0("p[D_time] = ",scales::scientific(ks_p2$p.value,digits = 3)),
+                                         paste0("p[D_time] = ",scales::scientific(ks_p3$p.value,digits = 3)),
+                                         paste0("p[D_time] = ",scales::scientific(ks_p4$p.value,digits = 3))),
+                            Trial = c("Trial 4","Trial 1","Trial 2","Trial 3"))
 
-# Figure 5
+fig4c_ks_text_dist <- data.frame(p_values = c(paste0("p[D_dist] = ",scales::scientific(ks_pdist1$p.value,digits = 3)),
+                                         paste0("p[D_dist] = ",scales::scientific(ks_pdist2$p.value,digits = 3)),
+                                         paste0("p[D_dist] = ",scales::scientific(ks_pdist3$p.value,digits = 3)),
+                                         paste0("p[D_dist] = ",scales::scientific(ks_pdist4$p.value,digits = 3))),
+                            Trial = c("Trial 4","Trial 1","Trial 2","Trial 3"))
+
+fig4c_fin <- fig4c + geom_text(data=fig4c_ks_text_dist,aes(label = p_values),x = 25, y = 35,size=20) +
+  geom_text(data=fig4c_ks_text_time,aes(label = p_values),x = 25, y = 30,size=20)
+
+
+fig4.1 <- ggarrange(fig4b,fig4c_fin,ncol=2,widths = c(0.9,1))
+fig4 <- ggarrange(fig4a,fig4.1,nrow=2,heights = c(1,2))
+ggsave(filename = "fig4.2.jpeg",plot = fig4,device = "jpeg",path = "~/Desktop/ESM_Hensley_etal_2023/figures/",dpi = 300,units = "px",height = 12000,width = 12000,limitsize = FALSE)
+
+# Figure 3
 disp_db <- disp_dat %>% dplyr::mutate(duration = time, ipi = ipi_time_s) %>%
   dplyr::select(display_num,pulse_num,duration,ipi,ipd_distance_mm,vert_dist_mm,relative_brightness) %>%
   gather(key = "trait",value = "measurement",duration,ipi,ipd_distance_mm,vert_dist_mm,relative_brightness) %>%
@@ -666,7 +822,7 @@ fig5c <- delay_dat_during %>% rename(Distance = eu_dist) %>%
         legend.position = "top") +
   ylim(c(0,12)) +
   xlab("Duration of stimulus (s)") +
-  ylab("Latency to display\nduring stimulus(s)") +
+  ylab("Latency to display\nduring stimulus (s)") +
   guides(colour = guide_colorbar(label.theme=element_text(size=15)))
 
 fig5c <- ggMarginal(fig5c,margins = "y",type = "histogram",color="#0072B2",fill=NA,size = 10,linewidth=2)
@@ -702,9 +858,9 @@ fig5d <- delay_dat_after %>%
                   color="black")
 
 fig5 <- ggarrange(fig5a,fig5d,fig5c,nrow=1,ncol = 3,labels = "AUTO",font.label = list(size=60,face="bold"))
-ggsave(filename = "fig5.jpeg",plot = fig5,device = "jpeg",path = "~/Desktop/ESM_Hensley_etal_2023/figures/",dpi = 300,units = "px",height = 4000,width = 14000,limitsize = FALSE)
+ggsave(filename = "fig5.2.jpeg",plot = fig5,device = "jpeg",path = "~/Desktop/ESM_Hensley_etal_2023/figures/",dpi = 300,units = "px",height = 4000,width = 14000,limitsize = FALSE)
 
-# Figure 6
+# Figure 4
 ## WARNING: THE PERMUTED DATASETS IN THE NEXT SECTION TAKE A VERY LONG TIME TO COMPUTE. DO NOT RE-PERMUTE THE DATASETS ONCE YOU HAVE MADE THEM ALREADY
 
 time_neighbors <- function(data_set2,index){
@@ -745,6 +901,7 @@ fig6a <- nn_np_all %>%
   theme_minimal(base_size = 20,) +
   scale_color_gradient(name = "Time to next soonest display (s)",low="lightgrey",high="black",
                        guide="colourbar",aesthetics = ("colour")) +
+  scale_x_continuous(breaks = c(1,2,3,4,5,6,7,8,9)) +
   theme(axis.title = element_text(size=50,face = "bold"),
         axis.text = element_text(size=30),
         legend.title = element_text(size=30,face="bold"),
@@ -1069,6 +1226,15 @@ fig6.4 <- ggarrange(fig6d,fig6.3,ncol = 2,labels = c("D",NA),font.label = list(s
 
 fig6 <- ggarrange(fig6.2,fig6.4,ncol = 1)
 ggsave(filename = "fig6.jpeg",plot = fig6,device = "jpeg",path = "~/Desktop/ESM_Hensley_etal_2023/figures/",dpi = 300,units = "px",height = 8000,width = 8000,limitsize = FALSE)
+
+
+fig6new <- ggarrange(fig6a,fig6d,nrow = 1,labels = "AUTO",common.legend = TRUE,font.label = list(size=50,face="bold"))
+ggsave(filename = "fig6new.jpeg",plot = fig6new,device = "jpeg",path = "~/Desktop/ESM_Hensley_etal_2023/figures/",dpi = 300,units = "px",height = 4800,width = 11000,limitsize = FALSE)
+
+fig6supp_top <-ggarrange(fig6b,fig6c,nrow = 1)
+fig6supp_btm <-ggarrange(fig6e,fig6f,fig6g,nrow = 1)
+fig6supp <-ggarrange(fig6supp_top,fig6supp_btm,nrow = 2,labels = "AUTO",font.label = list(size=50,face="bold"))
+ggsave(filename = "fig6supp.jpeg",plot = fig6supp,device = "jpeg",path = "~/Desktop/ESM_Hensley_etal_2023/figures/",dpi = 300,units = "px",height = 5000,width = 8000,limitsize = FALSE)
 
 ## Supplementary Results ##
 
